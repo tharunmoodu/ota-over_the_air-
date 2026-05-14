@@ -5,6 +5,7 @@ import time
 import os
 import sys
 import logging
+import threading
 
 REPO_DIR      = os.path.dirname(os.path.abspath(__file__))
 APP_SCRIPT    = os.path.join(REPO_DIR, "app.py")
@@ -44,12 +45,24 @@ def pull_latest():
     log.info(out)
     return code == 0
 
+def log_app_output(proc):
+    for line in proc.stdout:
+        log.info(f"[APP] {line.rstrip()}")
+
 def start_app():
     global app_process
     stop_app()
-    log.info(f"Starting app.py ...")
-    app_process = subprocess.Popen([sys.executable, APP_SCRIPT], cwd=REPO_DIR)
+    log.info("Starting app.py ...")
+    app_process = subprocess.Popen(
+        [sys.executable, "-u", APP_SCRIPT],
+        cwd=REPO_DIR,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1
+    )
     log.info(f"App running with PID {app_process.pid}")
+    threading.Thread(target=log_app_output, args=(app_process,), daemon=True).start()
 
 def stop_app():
     global app_process
@@ -63,8 +76,15 @@ def stop_app():
         app_process = None
 
 def main():
-    log.info("OTA Updater started. Polling every 30 seconds.")
+    log.info("=" * 50)
+    log.info("  OTA Updater started")
+    log.info(f"  Repo     : {REPO_DIR}")
+    log.info(f"  Branch   : {BRANCH}")
+    log.info(f"  Interval : {POLL_INTERVAL}s")
+    log.info("=" * 50)
+
     start_app()
+
     while True:
         try:
             time.sleep(POLL_INTERVAL)
@@ -76,10 +96,10 @@ def main():
             else:
                 log.info(f"Update found! {local[:8]} → {remote[:8]}")
                 if pull_latest():
-                    log.info("Update applied! Restarting app...")
+                    log.info("✅ Update applied! Restarting app...")
                     start_app()
                 else:
-                    log.error("git pull failed. Will retry next cycle.")
+                    log.error("❌ git pull failed. Will retry next cycle.")
         except KeyboardInterrupt:
             log.info("OTA Updater stopped.")
             stop_app()
