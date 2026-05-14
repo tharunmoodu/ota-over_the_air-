@@ -2,7 +2,7 @@
 
 import time
 
-VERSION = "3.0.0"
+VERSION = "4.0.0"
 
 def main():
     while True:
